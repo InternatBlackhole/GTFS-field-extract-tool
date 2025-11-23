@@ -1,9 +1,11 @@
-package cmd
+package extract
 
 import (
 	"archive/zip"
+	"bytes"
 	"encoding/csv"
 	"fmt"
+	"os"
 	"slices"
 	"testing"
 )
@@ -108,71 +110,106 @@ type zipTestFunc func(reader *zip.Reader, filename string, f *zip.File) error //
 type zipTests map[string]zipTestFunc                                          // filename, test function
 
 func Test_extractCommand(t *testing.T) {
+	t.Chdir(os.Getenv("PWD_CODE"))
+
+	readBuffer := new(bytes.Buffer)
+	//read whole file into buffer
+	inputFile, err := os.Open("feed.zip")
+	if err != nil {
+		t.Fatalf("failed to open input zip file: %v", err)
+	}
+	defer inputFile.Close()
+	_, err = readBuffer.ReadFrom(inputFile)
+	if err != nil {
+		t.Fatalf("failed to read input zip file: %v", err)
+	}
+	newZipReader := func() *zip.Reader {
+		zipReader, err := zip.NewReader(bytes.NewReader(readBuffer.Bytes()), int64(readBuffer.Len()))
+		if err != nil {
+			t.Fatalf("failed to create zip reader: %v", err)
+		}
+		return zipReader
+	}
+
 	tests := []struct {
 		name string
 
-		inputZip  string
-		outputZip string
-		flags     []string
+		inputZip func() *zip.Reader
+		//outputZip func() (*zip.Writer, *bytes.Buffer, func()) // returns zip writer and a cleanup function
+		flags *ExtractParams
 
 		wantErr        bool
 		outputZipTests zipTests // if len > 0, runs tests on output zip, if key "ALL", runs single test on whole zip
 	}{
+		//THESE SHOULD BE TESTS FOR THE Validate() FUNCTION
 		{
-			name:      "exclude-files and include-files mutually exclusive",
-			inputZip:  "feed.zip",
-			outputZip: "output.zip",
-			flags:     []string{"--exclude-files=stops.txt", "--include-files=routes.txt"},
-			wantErr:   true,
+			name:     "exclude-files and include-files mutually exclusive",
+			inputZip: newZipReader,
+			flags: &ExtractParams{
+				excludedFiles: []string{"stops.txt"},
+				includedFiles: []string{"routes.txt"}},
+			wantErr: true,
 		},
 		{
-			name:      "exclude-shapes and exclude-files shapes.txt mutually exclusive",
-			inputZip:  "feed.zip",
-			outputZip: "output.zip",
-			flags:     []string{"--exclude-shapes", "--exclude-files=shapes.txt"},
-			wantErr:   true,
+			name:     "exclude-shapes and exclude-files shapes.txt mutually exclusive",
+			inputZip: newZipReader,
+			flags: &ExtractParams{
+				excludeShapes: true,
+				excludedFiles: []string{"shapes.txt"}},
+			wantErr: true,
 		},
 		{
-			name:      "shapes.txt cannot be excluded directly",
-			inputZip:  "feed.zip",
-			outputZip: "output.zip",
-			flags:     []string{"--exclude-files=shapes.txt"},
-			wantErr:   true,
+			name:     "shapes.txt cannot be excluded directly",
+			inputZip: newZipReader,
+			flags: &ExtractParams{
+				excludedFiles: []string{"shapes.txt"}},
+			wantErr: true,
 		},
 		{
-			name:      "same field cannot be both included and excluded",
-			inputZip:  "feed.zip",
-			outputZip: "output.zip",
-			flags:     []string{"--include-fields=stops.txt,stop_name", "--exclude-fields=stops.txt,stop_name"},
-			wantErr:   true,
+			name:     "same field cannot be both included and excluded",
+			inputZip: newZipReader,
+			flags: &ExtractParams{
+				includedFields: map[string][]string{
+					"stops.txt": {"stop_name"},
+				},
+				excludedFields: map[string][]string{
+					"stops.txt": {"stop_name"},
+				}},
+
+			wantErr: true,
 		},
 		{
-			name:      "just exclude files",
-			inputZip:  "feed.zip",
-			outputZip: "output.zip",
-			flags:     []string{"--exclude-files=stops.txt,shapes.txt"},
-			wantErr:   false,
+			name:     "just exclude files",
+			inputZip: newZipReader,
+			//exclude shapes not yet implemented
+			flags:   &ExtractParams{excludedFiles: []string{"stops.txt"} /*excludeShapes: true*/},
+			wantErr: false,
 			outputZipTests: zipTests{
-				"ALL": allExcept("stops.txt", "shapes.txt"),
+				"ALL": allExcept("stops.txt" /*"shapes.txt"*/),
 			},
 		},
 		{
-			name:      "no exclude or include files, just fields filters, also they are valid",
-			inputZip:  "feed.zip",
-			outputZip: "output.zip",
-			flags:     []string{"--include-fields=stops.txt,stop_name,stop_id", "--exclude-fields=routes.txt,route_color"},
-			wantErr:   false,
+			name:     "no exclude or include files, just fields filters, also they are valid",
+			inputZip: newZipReader,
+			flags: &ExtractParams{
+				includedFields: map[string][]string{
+					"stops.txt": {"stop_name", "stop_id"},
+				},
+				excludedFields: map[string][]string{
+					"routes.txt": {"route_color"},
+				},
+			},
+			wantErr: false,
 			outputZipTests: zipTests{
-				"stops.txt":  hasHeader("stop_name", "stop_id"),
 				"routes.txt": hasHeader("route_id", "agency_id", "route_long_name", "route_type", "route_text_color"), // route_desc excluded
+				"stops.txt":  hasHeader("stop_name", "stop_id"),
 			},
 		},
 		{
-			name:      "preserve invalid columns in fare_leg_rules.txt",
-			inputZip:  "feed.zip",
-			outputZip: "output.zip",
-			flags:     []string{"--include-files=fare_leg_rules.txt"},
-			wantErr:   false,
+			name:     "preserve invalid columns in fare_leg_rules.txt",
+			inputZip: newZipReader,
+			flags:    &ExtractParams{includedFiles: []string{"fare_leg_rules.txt"}},
+			wantErr:  false,
 			outputZipTests: zipTests{
 				"fare_leg_rules.txt": hasHeader("fare_product_id", "min_distance", "max_distance", "distance_type"),
 			},
@@ -181,27 +218,26 @@ func Test_extractCommand(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			// Setup command with flags
-			cmd := extractCmd
-			command := []string{"extract"}
-			command = append(command, tt.flags...)
-			cmd.SetArgs(append(command, tt.inputZip, tt.outputZip))
+			inputZip := tt.inputZip()
+			buffer := new(bytes.Buffer)
+			zipWriter := zip.NewWriter(buffer)
 
-			// Execute command
-			err := cmd.Execute()
+			err := extract(inputZip, zipWriter, tt.flags)
+			zipWriter.Close()
+
 			if (err != nil) != tt.wantErr {
-				t.Errorf("extractCmd.Execute() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf("extract() error = %v, wantErr %v", err, tt.wantErr)
 				return
 			}
 			if len(tt.outputZipTests) > 0 && !tt.wantErr {
-				zipReader, err := zip.OpenReader(tt.outputZip)
+				zipReader, err := zip.NewReader(bytes.NewReader(buffer.Bytes()), int64(buffer.Len()))
 				if err != nil {
 					t.Errorf("failed to create zip reader: %v", err)
 					return
 				}
-				defer zipReader.Close()
+				//defer zipReader.Close()
 				if testFunc, ok := tt.outputZipTests["ALL"]; ok {
-					if err := testFunc(&zipReader.Reader, "", nil); err != nil {
+					if err := testFunc(zipReader, "", nil); err != nil {
 						t.Errorf("output zip test failed: %v", err)
 					}
 				} else {
@@ -210,7 +246,7 @@ func Test_extractCommand(t *testing.T) {
 						fileMap[f.Name] = f
 					}
 					for filename, testFunc := range tt.outputZipTests {
-						if err := testFunc(&zipReader.Reader, filename, fileMap[filename]); err != nil {
+						if err := testFunc(zipReader, filename, fileMap[filename]); err != nil {
 							t.Errorf("output zip test for file %s failed: %v", filename, err)
 						}
 					}

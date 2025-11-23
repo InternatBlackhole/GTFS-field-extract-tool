@@ -1,0 +1,6 @@
+{
+    "go.testEnvVars": {
+        "PWD_CODE": "${workspaceFolder}"
+    },
+    "go.testFlags": ["-timeout", "2m"]
+}

@@ -6,8 +6,6 @@ import (
 	"iter"
 	"slices"
 	"strings"
-
-	"github.com/spf13/cobra"
 )
 
 var (
@@ -41,23 +39,6 @@ type ExtractParams struct {
 	parsed bool
 }
 
-// TODO: remove?
-func NewExtractParamsWithCobraBindings(cmd *cobra.Command) *ExtractParams {
-	e := &ExtractParams{}
-	fl := cmd.Flags()
-
-	fl.StringArrayVar(&e.excludedFiles, "exclude-files", []string{}, "Files to exclude")
-	fl.StringArrayVar(&e.includedFiles, "include-files", []string{}, "Files to include")
-	fl.StringArrayVar(&e._excludedFields, "exclude-fields", []string{}, "Fields to exclude (format: filename,fieldnames,...)")
-	fl.StringArrayVar(&e._includedFields, "include-fields", []string{}, "Fields to include (format: filename,fieldnames,...)")
-	fl.BoolVar(&e.excludeEmptyFiles, "exclude-empty-files", false, "Exclude empty files")
-	fl.BoolVar(&e.excludeEmptyFields, "exclude-empty-fields", false, "Exclude empty fields")
-	fl.BoolVar(&e.excludeShapes, "exclude-shapes", false, "Exclude shapes")
-
-	cmd.MarkFlagsMutuallyExclusive("exclude-files", "include-files")
-	return e
-}
-
 func NewExtractParams(
 	excludedFiles, includedFiles []string,
 	excludeEmptyFiles, excludeEmptyFields, excludeShapes bool,
@@ -74,7 +55,7 @@ func NewExtractParams(
 	}
 }
 
-// NewExtractParamsParsed creates an ExtractParams instance with all fields parsed and set.
+// Creates an ExtractParams instance with all fields already set. Does not perform any validation.
 func NewExtractParamsParsed(
 	excludedFiles, includedFiles []string,
 	excludeEmptyFiles, excludeEmptyFields, excludeShapes bool,

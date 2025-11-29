@@ -10,6 +10,9 @@ import (
 	"github.com/spf13/cobra"
 )
 
+var _params *params.ExtractParams
+var _extractor *extract.Extractor
+
 // extractCmd represents the extract command
 var ExtractCmd = &cobra.Command{
 	Use:   "extract [flags]... input-gtfs output-gtfs",
@@ -36,6 +39,15 @@ var ExtractCmd = &cobra.Command{
 		return _extractor.Extract(&zipReader.Reader, zipWriter)
 	},
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		_params = params.NewExtractParams(
+			_exclude_files,
+			_include_files,
+			_exclude_emptyfiles,
+			_exclude_emptyfields,
+			_exclude_shapes,
+			_exclude_fields,
+			_include_fields,
+		)
 		err := _params.Parse()
 		if err != nil {
 			return err
@@ -59,20 +71,35 @@ var ExtractCmd = &cobra.Command{
 	Args: cobra.ExactArgs(2),
 }
 
-var (
-	_params         *params.ExtractParams
-	_verbose        bool
-	_verboseverbose bool
-	_extractor      *extract.Extractor
-)
-
 var reporter extract.StatusConsumer = func(status string, level extract.StatusLevel) {
 	fmt.Println(status)
 }
 
+var (
+	_exclude_files       []string
+	_include_files       []string
+	_exclude_fields      []string
+	_include_fields      []string
+	_exclude_emptyfiles  bool
+	_exclude_emptyfields bool
+	_exclude_shapes      bool
+	_verbose             bool
+	_verboseverbose      bool
+)
+
 func init() {
-	// TODO: make params.ExtractParams only be the parser and holder of parsed state
-	_params = params.NewExtractParamsWithCobraBindings(ExtractCmd)
-	ExtractCmd.Flags().BoolVarP(&_verbose, "verbose", "v", false, "Enable verbose output")
-	ExtractCmd.Flags().BoolVar(&_verboseverbose, "verboseverbose", false, "Enable very verbose output")
+	fl := ExtractCmd.Flags()
+
+	fl.StringArrayVar(&_exclude_files, "exclude-files", []string{}, "Files to exclude")
+	fl.StringArrayVar(&_include_files, "include-files", []string{}, "Files to include")
+	fl.StringArrayVar(&_exclude_fields, "exclude-fields", []string{}, "Fields to exclude (format: filename,fieldnames,...)")
+	fl.StringArrayVar(&_include_fields, "include-fields", []string{}, "Fields to include (format: filename,fieldnames,...)")
+	fl.BoolVar(&_exclude_emptyfiles, "exclude-empty-files", false, "Exclude empty files")
+	fl.BoolVar(&_exclude_emptyfields, "exclude-empty-fields", false, "Exclude empty fields")
+	fl.BoolVar(&_exclude_shapes, "exclude-shapes", false, "Exclude shapes")
+	fl.BoolVarP(&_verbose, "verbose", "v", false, "Enable verbose output")
+	fl.BoolVar(&_verboseverbose, "verboseverbose", false, "Enable very verbose output")
+
+	ExtractCmd.MarkFlagsMutuallyExclusive("exclude-files", "include-files")
+
 }

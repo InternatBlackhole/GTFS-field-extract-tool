@@ -44,19 +44,49 @@ func NewExtractParams(
 	excludeEmptyFiles, excludeEmptyFields, excludeShapes bool,
 	excludedFields, includedFields []string,
 ) *ExtractParams {
-	return &ExtractParams{
-		excludedFiles:      excludedFiles,
-		includedFiles:      includedFiles,
-		excludeEmptyFiles:  excludeEmptyFiles,
-		excludeEmptyFields: excludeEmptyFields,
-		excludeShapes:      excludeShapes,
-		_excludedFields:    excludedFields,
-		_includedFields:    includedFields,
-	}
+	ret := internalNew(
+		excludedFiles,
+		includedFiles,
+		excludeEmptyFiles,
+		excludeEmptyFields,
+		excludeShapes,
+		nil,
+		nil,
+	)
+
+	ret._excludedFields = excludedFields
+	ret._includedFields = includedFields
+
+	return ret
 }
 
-// Creates an ExtractParams instance with all fields already set. Does not perform any validation.
+// Creates an ExtractParams instance with all fields already set. Parsing still required to check validity.
 func NewExtractParamsParsed(
+	excludedFiles, includedFiles []string,
+	excludeEmptyFiles, excludeEmptyFields, excludeShapes bool,
+	excludedFields, includedFields map[string][]string,
+) *ExtractParams {
+	ret := internalNew(
+		excludedFiles,
+		includedFiles,
+		excludeEmptyFiles,
+		excludeEmptyFields,
+		excludeShapes,
+		excludedFields,
+		includedFields,
+	)
+
+	if excludedFields == nil {
+		ret.excludedFields = make(map[string][]string)
+	}
+	if includedFields == nil {
+		ret.includedFields = make(map[string][]string)
+	}
+
+	return ret
+}
+
+func internalNew(
 	excludedFiles, includedFiles []string,
 	excludeEmptyFiles, excludeEmptyFields, excludeShapes bool,
 	excludedFields, includedFields map[string][]string,
@@ -69,7 +99,7 @@ func NewExtractParamsParsed(
 		excludeShapes:      excludeShapes,
 		excludedFields:     excludedFields,
 		includedFields:     includedFields,
-		parsed:             true,
+		parsed:             false,
 	}
 }
 
@@ -101,7 +131,7 @@ func (e *ExtractParams) ExcludeShapes() bool {
 	return e.excludeShapes
 }
 
-func (e *ExtractParams) Parse() error {
+func (e *ExtractParams) ParseAndValidate() error {
 	if e.parsed {
 		return nil
 	}
@@ -142,12 +172,19 @@ func (e *ExtractParams) Parse() error {
 		return errors.Join(ErrParsingFailed, ErrShapesExcluded)
 	}
 
+	// if we want to exclude shapes, then we need to exclude field shape_id from trips.txt, and exclude shapes.txt from files
+	// add to the map of excluded fields
+	if e.ExcludeShapes() {
+		e.excludedFields["trips.txt"] = append(e.excludedFields["trips.txt"], "shape_id")
+		e.excludedFiles = append(e.excludedFiles, "shapes.txt")
+	}
+
 	e.parsed = true
 
 	return nil
 }
 
-func (e *ExtractParams) IsParsed() bool {
+func (e *ExtractParams) IsParsedAndValid() bool {
 	return e.parsed
 }
 

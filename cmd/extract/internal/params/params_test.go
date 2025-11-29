@@ -90,7 +90,7 @@ func Test_ParseAndValidate(t *testing.T) {
 
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			err := tt.params.Parse()
+			err := tt.params.ParseAndValidate()
 			if (err != nil) != tt.wantErr {
 				t.Errorf("ExtractParams.Parse() error = %v, wantErr %v", err, tt.wantErr)
 			}

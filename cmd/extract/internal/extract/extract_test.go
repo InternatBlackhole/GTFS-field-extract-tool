@@ -129,11 +129,11 @@ func Test_extractCommand(t *testing.T) {
 		{
 			name:     "just exclude files",
 			inputZip: newZipReader,
-			//exclude shapes not yet implemented
-			flags:   &testExtractParams{excludedFiles: []string{"stops.txt"} /*excludeShapes: true*/},
-			wantErr: false,
+			flags:    &testExtractParams{excludedFiles: []string{"stops.txt"}, excludeShapes: true},
+			wantErr:  false,
 			outputZipTests: zipTests{
-				"ALL": allExcept("stops.txt" /*"shapes.txt"*/),
+				"ALL":       allExcept("stops.txt", "shapes.txt"),
+				"trips.txt": hasHeader(true, "shape_id"), // shape_id excluded
 			},
 		},
 		{
@@ -149,8 +149,8 @@ func Test_extractCommand(t *testing.T) {
 			},
 			wantErr: false,
 			outputZipTests: zipTests{
-				"routes.txt": hasHeader("route_id", "agency_id", "route_long_name", "route_type", "route_text_color"), // route_color excluded
-				"stops.txt":  hasHeader("stop_name", "stop_id"),
+				"routes.txt": hasHeader(false, "route_id", "agency_id", "route_long_name", "route_type", "route_text_color"), // route_color excluded
+				"stops.txt":  hasHeader(false, "stop_name", "stop_id"),
 			},
 		},
 		{
@@ -159,7 +159,7 @@ func Test_extractCommand(t *testing.T) {
 			flags:    &testExtractParams{includedFiles: []string{"fare_leg_rules.txt"}},
 			wantErr:  false,
 			outputZipTests: zipTests{
-				"fare_leg_rules.txt": hasHeader("fare_product_id", "min_distance", "max_distance", "distance_type"),
+				"fare_leg_rules.txt": hasHeader(false, "fare_product_id", "min_distance", "max_distance", "distance_type"),
 			},
 		},
 	}
@@ -176,13 +176,19 @@ func Test_extractCommand(t *testing.T) {
 
 			reportLevel := EvenMoreVerbose
 
+			params := tt.flags.ToExtractParams()
+			err := params.ParseAndValidate()
+			if err != nil {
+				t.Fatalf("failed to parse and validate params: %v", err)
+			}
+
 			extractor := NewExtractor(
-				tt.flags.ToExtractParams(),
+				params,
 				reporter,
 				reportLevel,
 			)
 
-			err := extractor.Extract(inputZip, zipWriter)
+			err = extractor.Extract(inputZip, zipWriter)
 			zipWriter.Close()
 
 			if (err != nil) != tt.wantErr {
@@ -230,7 +236,7 @@ func allExcept(expectedExcludedFiles ...string) zipTestFunc {
 	}
 }
 
-func hasHeader(expectedHeaderVals ...string) zipTestFunc {
+func hasHeader(negate bool, expectedHeaderVals ...string) zipTestFunc {
 	return func(r *zip.Reader, _ string, zipFile *zip.File) error {
 		zipFileReader, err := zipFile.Open()
 		if err != nil {
@@ -245,13 +251,13 @@ func hasHeader(expectedHeaderVals ...string) zipTestFunc {
 			return err
 		}
 
-		if len(header) != len(expectedHeaderVals) {
+		if (len(header) != len(expectedHeaderVals)) != negate {
 			return fmt.Errorf("header length %d does not match expected length %d", len(header), len(expectedHeaderVals))
 		}
 
 		// Compare with expected, order doesn't matter
 		for _, val := range expectedHeaderVals {
-			if !slices.Contains(header, val) {
+			if !slices.Contains(header, val) != negate {
 				return fmt.Errorf("expected header value %s not found in %v", val, header)
 			}
 		}

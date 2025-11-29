@@ -48,7 +48,7 @@ var ExtractCmd = &cobra.Command{
 			_exclude_fields,
 			_include_fields,
 		)
-		err := _params.Parse()
+		err := _params.ParseAndValidate()
 		if err != nil {
 			return err
 		}

@@ -52,7 +52,7 @@ func (e *Extractor) report(level StatusLevel, format string, a ...any) {
 }
 
 func (e *Extractor) Extract(zipReader *zip.Reader, zipWriter *zip.Writer) error {
-	if !e.params.IsParsed() {
+	if !e.params.IsParsedAndValid() {
 		return fmt.Errorf("extract parameters are not parsed or valid")
 	}
 

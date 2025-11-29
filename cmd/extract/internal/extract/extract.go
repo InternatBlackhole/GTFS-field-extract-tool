@@ -245,9 +245,6 @@ func iterateCSVRows(src *csv.Reader) iter.Seq[*iteratorEntry] {
 	}
 }
 
-// Returns true if the field should be included
-//type deciderFunc func(fileName string, fieldName string) bool
-
 func filterFiles(srcFiles []*zip.File, filterFiles []string, include bool) []*zip.File {
 	return slices.DeleteFunc(srcFiles, func(file *zip.File) bool {
 		//TODO: optimize with map (just key presence) or set (something hash based)
@@ -267,53 +264,3 @@ func (e *Extractor) decider(fileName string, fieldName string) bool {
 	// if not specified, include by default
 	return true
 }
-
-/*func handleFileFields(fileSrc io.Reader, fileDst io.Writer, fileName string, fieldDecider deciderFunc) error {
-	csvReader := csv.NewReader(fileSrc)
-	csvWriter := csv.NewWriter(fileDst)
-	defer csvWriter.Flush()
-
-	// Fix for malformed CSVs
-	csvReader.LazyQuotes = true
-
-	headers, err := csvReader.Read()
-	if err != nil {
-		return err
-	}
-
-	includeIndices := []int{}
-	for i, header := range headers {
-		if fieldDecider(fileName, header) {
-			includeIndices = append(includeIndices, i)
-		}
-	}
-
-	// Write new headers
-	newHeaders := []string{}
-	for _, idx := range includeIndices {
-		newHeaders = append(newHeaders, headers[idx])
-	}
-	if err := csvWriter.Write(newHeaders); err != nil {
-		return err
-	}
-
-	// Process rows
-	for {
-		record, err := csvReader.Read()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return fmt.Errorf("error reading row from file %s: %w", fileName, err)
-		}
-
-		newRecord := []string{}
-		for _, idx := range includeIndices {
-			newRecord = append(newRecord, record[idx])
-		}
-		if err := csvWriter.Write(newRecord); err != nil {
-			return fmt.Errorf("error writing row \"%v\" to file %s: %w", newRecord, fileName, err)
-		}
-	}
-	return nil
-}*/

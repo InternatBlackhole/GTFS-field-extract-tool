@@ -75,6 +75,32 @@ func Test_filterFiles(t *testing.T) {
 				genZip("b.txt"),
 			},
 		},
+		{
+			name: "exclude file that isn't in source",
+			srcFiles: []*zip.File{
+				genZip("a.txt"),
+				genZip("b.txt"),
+				genZip("c.txt"),
+			},
+			filterFiles: []string{"d.txt"},
+			include:     false,
+			want: []*zip.File{
+				genZip("a.txt"),
+				genZip("b.txt"),
+				genZip("c.txt"),
+			},
+		},
+		{
+			name: "include file that isn't in source",
+			srcFiles: []*zip.File{
+				genZip("a.txt"),
+				genZip("b.txt"),
+				genZip("c.txt"),
+			},
+			filterFiles: []string{"d.txt"},
+			include:     true,
+			want:        []*zip.File{},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {

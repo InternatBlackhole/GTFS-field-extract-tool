@@ -8,7 +8,33 @@ import (
 	"os"
 	"slices"
 	"testing"
+
+	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/params"
 )
+
+type testExtractParams struct {
+	excludedFiles []string
+	includedFiles []string
+
+	excludeShapes      bool
+	excludeEmptyFiles  bool
+	excludeEmptyFields bool
+
+	includedFields map[string][]string
+	excludedFields map[string][]string
+}
+
+func (tep *testExtractParams) ToExtractParams() *params.ExtractParams {
+	return params.NewExtractParamsWithMaps(
+		tep.excludedFiles,
+		tep.includedFiles,
+		tep.excludeEmptyFiles,
+		tep.excludeEmptyFields,
+		tep.excludeShapes,
+		tep.includedFields,
+		tep.excludedFields,
+	)
+}
 
 func Test_filterFiles(t *testing.T) {
 	genZip := func(name string) *zip.File {
@@ -63,54 +89,14 @@ func Test_filterFiles(t *testing.T) {
 	}
 }
 
-func Test_parseFieldsFieldList(t *testing.T) {
-	tests := []struct {
-		name      string
-		fieldList []string
-		want      map[string][]string
-		wantErr   bool
-	}{
-		{
-			name:      "valid field list",
-			fieldList: []string{"file1,field1,field2", "file2,field3"},
-			want: map[string][]string{
-				"file1": {"field1", "field2"},
-				"file2": {"field3"},
-			},
-			wantErr: false,
-		},
-		{
-			name:      "invalid field list format",
-			fieldList: []string{"file1,field1,field2", "file2"},
-			want:      nil,
-			wantErr:   true,
-		},
-		{
-			name:      "empty field list",
-			fieldList: []string{},
-			want:      map[string][]string{},
-			wantErr:   false,
-		},
-	}
-
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, gotErr := parseFieldsFieldList(tt.fieldList)
-			if (gotErr != nil) != tt.wantErr {
-				t.Errorf("parseFieldsFieldList() error = %v, wantErr %v", gotErr, tt.wantErr)
-			}
-			if !tt.wantErr && !mapsEqual(got, tt.want) {
-				t.Errorf("parseFieldsFieldList() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 type zipTestFunc func(reader *zip.Reader, filename string, f *zip.File) error // error if test fails
 type zipTests map[string]zipTestFunc                                          // filename, test function
 
 func Test_extractCommand(t *testing.T) {
-	t.Chdir(os.Getenv("PWD_CODE"))
+	/*dir, set := os.LookupEnv("PWD_CODE")
+	if set {
+		t.Chdir(dir)
+	}*/
 
 	readBuffer := new(bytes.Buffer)
 	//read whole file into buffer
@@ -134,10 +120,8 @@ func Test_extractCommand(t *testing.T) {
 	tests := []struct {
 		name string
 
-		inputZip func() *zip.Reader
-		//outputZip func() (*zip.Writer, *bytes.Buffer, func()) // returns zip writer and a cleanup function
-		flags *ExtractParams
-
+		inputZip       func() *zip.Reader
+		flags          *testExtractParams
 		wantErr        bool
 		outputZipTests zipTests // if len > 0, runs tests on output zip, if key "ALL", runs single test on whole zip
 	}{
@@ -145,7 +129,7 @@ func Test_extractCommand(t *testing.T) {
 		{
 			name:     "exclude-files and include-files mutually exclusive",
 			inputZip: newZipReader,
-			flags: &ExtractParams{
+			flags: &testExtractParams{
 				excludedFiles: []string{"stops.txt"},
 				includedFiles: []string{"routes.txt"}},
 			wantErr: true,
@@ -153,7 +137,7 @@ func Test_extractCommand(t *testing.T) {
 		{
 			name:     "exclude-shapes and exclude-files shapes.txt mutually exclusive",
 			inputZip: newZipReader,
-			flags: &ExtractParams{
+			flags: &testExtractParams{
 				excludeShapes: true,
 				excludedFiles: []string{"shapes.txt"}},
 			wantErr: true,
@@ -161,14 +145,14 @@ func Test_extractCommand(t *testing.T) {
 		{
 			name:     "shapes.txt cannot be excluded directly",
 			inputZip: newZipReader,
-			flags: &ExtractParams{
+			flags: &testExtractParams{
 				excludedFiles: []string{"shapes.txt"}},
 			wantErr: true,
 		},
 		{
 			name:     "same field cannot be both included and excluded",
 			inputZip: newZipReader,
-			flags: &ExtractParams{
+			flags: &testExtractParams{
 				includedFields: map[string][]string{
 					"stops.txt": {"stop_name"},
 				},
@@ -182,7 +166,7 @@ func Test_extractCommand(t *testing.T) {
 			name:     "just exclude files",
 			inputZip: newZipReader,
 			//exclude shapes not yet implemented
-			flags:   &ExtractParams{excludedFiles: []string{"stops.txt"} /*excludeShapes: true*/},
+			flags:   &testExtractParams{excludedFiles: []string{"stops.txt"} /*excludeShapes: true*/},
 			wantErr: false,
 			outputZipTests: zipTests{
 				"ALL": allExcept("stops.txt" /*"shapes.txt"*/),
@@ -191,7 +175,7 @@ func Test_extractCommand(t *testing.T) {
 		{
 			name:     "no exclude or include files, just fields filters, also they are valid",
 			inputZip: newZipReader,
-			flags: &ExtractParams{
+			flags: &testExtractParams{
 				includedFields: map[string][]string{
 					"stops.txt": {"stop_name", "stop_id"},
 				},
@@ -208,7 +192,7 @@ func Test_extractCommand(t *testing.T) {
 		{
 			name:     "preserve invalid columns in fare_leg_rules.txt",
 			inputZip: newZipReader,
-			flags:    &ExtractParams{includedFiles: []string{"fare_leg_rules.txt"}},
+			flags:    &testExtractParams{includedFiles: []string{"fare_leg_rules.txt"}},
 			wantErr:  false,
 			outputZipTests: zipTests{
 				"fare_leg_rules.txt": hasHeader("fare_product_id", "min_distance", "max_distance", "distance_type"),
@@ -222,7 +206,7 @@ func Test_extractCommand(t *testing.T) {
 			buffer := new(bytes.Buffer)
 			zipWriter := zip.NewWriter(buffer)
 
-			err := extract(inputZip, zipWriter, tt.flags)
+			err := Extract(inputZip, zipWriter, tt.flags.ToExtractParams())
 			zipWriter.Close()
 
 			if (err != nil) != tt.wantErr {
@@ -300,15 +284,6 @@ func hasHeader(expectedHeaderVals ...string) zipTestFunc {
 	}
 }
 
-/*func fileFinder(z *zip.Reader, filename string) *zip.File {
-	for _, f := range z.File {
-		if f.Name == filename {
-			return f
-		}
-	}
-	return nil
-}*/
-
 func exists(filename string) zipTestFunc {
 	return func(r *zip.Reader, _ string, f *zip.File) error {
 		if f != nil {
@@ -316,17 +291,4 @@ func exists(filename string) zipTestFunc {
 		}
 		return fmt.Errorf("file %s does not exist in zip", filename)
 	}
-}
-
-func mapsEqual(a, b map[string][]string) bool {
-	if len(a) != len(b) {
-		return false
-	}
-	for key, aValue := range a {
-		bValue, exists := b[key]
-		if !exists || !slices.Equal(aValue, bValue) {
-			return false
-		}
-	}
-	return true
 }

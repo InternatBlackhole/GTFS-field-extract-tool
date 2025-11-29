@@ -5,6 +5,7 @@ import (
 	"encoding/csv"
 	"fmt"
 	"io"
+	"iter"
 	"slices"
 
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/params"
@@ -41,6 +42,7 @@ func (e *Extractor) report(level StatusLevel, format string, a ...any) {
 		for i, v := range a {
 			switch v := v.(type) {
 			case func() any:
+				p[i] = v()
 			case func() []any:
 				p[i] = v()
 			default:
@@ -78,105 +80,168 @@ func (e *Extractor) Extract(zipReader *zip.Reader, zipWriter *zip.Writer) error 
 	}
 
 	for _, f := range filteredFiles {
-		statusReporter(Verbose, "Processing file: %s", f.Name)
-		srcFile, err := f.Open()
-		if err != nil {
-			return err
-		}
-		writ, err := zipWriter.CreateHeader(&f.FileHeader)
-		if err != nil {
-			srcFile.Close()
-			return err
-		}
-
-		/*err = handleFileFields(srcFile, writ, f.Name, fieldDecider)
-		if err != nil {
-			srcFile.Close()
-			return err
-		}*/
-		csvReader := csv.NewReader(srcFile)
-		csvWriter := csv.NewWriter(writ)
-		defer csvWriter.Flush()
-
-		// Fix for malformed CSVs
-		csvReader.LazyQuotes = true
-
-		headers, err := csvReader.Read()
-		if err != nil {
-			return err
-		}
-		statusReporter(EvenMoreVerbose, "\tOriginal header: %v", headers)
-
-		includeIndices := make([]int, 0, len(headers))
-		for i, header := range headers {
-			if e.decider(f.Name, header) {
-				includeIndices = append(includeIndices, i)
-			}
-		}
-
-		statusReporter(EvenMoreVerbose, "\tNew header: %v", func() []any {
-			included := make([]any, len(includeIndices))
-			for i, idx := range includeIndices {
-				included[i] = headers[idx]
-			}
-			return included
-		})
-
-		// Write new headers
-		newHeaders := make([]string, len(includeIndices))
-		for i, idx := range includeIndices {
-			newHeaders[i] = headers[idx]
-		}
-		if err := csvWriter.Write(newHeaders); err != nil {
-			return err
-		}
-
-		statusReporter(EvenMoreVerbose, "\tProcessing rows for file: %s", f.Name)
-
-		rows := 0
-		// Preallocate newRecord slice
-		newRecord := make([]string, len(includeIndices))
-
-		// Process rows
-		for ; ; rows++ {
-			record, err := csvReader.Read()
-			if err == io.EOF {
-				break
-			}
+		err := func() error {
+			statusReporter(Verbose, "Processing file: %s", f.Name)
+			srcFile, err := f.Open()
 			if err != nil {
-				return fmt.Errorf("error reading row from file %s: %w", f.Name, err)
+				return err
+			}
+			defer srcFile.Close()
+			csvReader := csv.NewReader(srcFile)
+
+			// Fix for malformed CSVs
+			csvReader.LazyQuotes = true
+
+			nextRow, stop := iter.Pull(iterateCSVRows(csvReader))
+			defer stop()
+
+			entry, ok := nextRow()
+			rowDecider := func(entry *iteratorEntry, ok bool) ([]string, error) {
+				switch {
+				case entry == nil && !ok:
+					// File is completely empty
+					return nil, nil
+				case entry == nil && ok:
+					return nil, fmt.Errorf("unexpected nil entry when reading headers from file %s", f.Name)
+				case entry.err != nil && (entry.err == io.EOF || len(entry.record) == 0):
+					return nil, nil
+				case entry.err != nil:
+					return nil, fmt.Errorf("error reading headers from file %s: %w", f.Name, entry.err)
+				case len(entry.record) > 0:
+					// First read, entry.record has headers
+					return entry.record, nil
+				default:
+					return nil, fmt.Errorf("unexpected state when reading headers from file %s", f.Name)
+				}
 			}
 
+			headers, err := rowDecider(entry, ok)
+			if err != nil {
+				return err
+			}
+
+			if headers == nil {
+				if e.params.ExcludeEmptyFiles() {
+					statusReporter(Verbose, "\tEmpty file: %s, excluding!", f.Name)
+					return nil
+				}
+				statusReporter(Verbose, "\tEmpty file: %s, not excluding", f.Name)
+			}
+
+			// Read the first row after headers to determine if the file is empty
+			entry, ok = nextRow()
+			dataRow, err := rowDecider(entry, ok)
+			if err != nil {
+				return err
+			}
+			if len(dataRow) == 0 {
+				if e.params.ExcludeEmptyFiles() {
+					statusReporter(Verbose, "\tNo data rows in file: %s, excluding!", f.Name)
+					return nil
+				}
+				statusReporter(Verbose, "\tNo data rows in file: %s, but not excluding", f.Name)
+			}
+
+			// Create the file in the output zip
+			// Done here to ensure empty files are not created if such is desired
+			writ, err := zipWriter.CreateHeader(&f.FileHeader)
+			if err != nil {
+				return err
+			}
+			csvWriter := csv.NewWriter(writ)
+			defer csvWriter.Flush()
+
+			statusReporter(EvenMoreVerbose, "\tOriginal header: %v", headers)
+
+			includeIndices := make([]int, 0, len(headers))
+			for i, header := range headers {
+				if e.decider(f.Name, header) {
+					includeIndices = append(includeIndices, i)
+				}
+			}
+
+			statusReporter(EvenMoreVerbose, "\tNew header: %v", func() []any {
+				included := make([]any, len(includeIndices))
+				for i, idx := range includeIndices {
+					included[i] = headers[idx]
+				}
+				return included
+			})
+
+			// Write new headers
+			newHeaders := make([]string, len(includeIndices))
 			for i, idx := range includeIndices {
-				newRecord[i] = record[idx]
+				newHeaders[i] = headers[idx]
 			}
-			if err := csvWriter.Write(newRecord); err != nil {
-				return fmt.Errorf("error writing row \"%v\" to file %s: %w", newRecord, f.Name, err)
+			if err := csvWriter.Write(newHeaders); err != nil {
+				return err
 			}
-		}
 
-		if rows == 0 {
-			// TODO: decide if we want to keep empty files
-			statusReporter(Verbose, "\tNo rows written for file: %s", f.Name)
-		}
+			statusReporter(EvenMoreVerbose, "\tProcessing rows for file: %s", f.Name)
 
-		srcFile.Close()
-		statusReporter(Verbose, "Finished processing file: %s, rows written: %d", f.Name, rows)
+			if dataRow == nil {
+				// No data rows to process
+				statusReporter(Verbose, "Finished processing file: %s, rows written: 0", f.Name)
+				return nil
+			}
+
+			// Preallocate newRecord slice
+			newRecord := make([]string, len(includeIndices))
+			rowsRead := 1 // Since we have already read one data row
+
+			// First process the already read dataRow
+			record := dataRow
+
+			// Process rows
+			for ; ; rowsRead++ {
+				for i, idx := range includeIndices {
+					newRecord[i] = record[idx]
+				}
+				if err := csvWriter.Write(newRecord); err != nil {
+					return fmt.Errorf("error writing row \"%v\" to file %s: %w", newRecord, f.Name, err)
+				}
+
+				entry, ok = nextRow()
+				record, err = rowDecider(entry, ok)
+				if err != nil {
+					return err
+				}
+				if record == nil {
+					break
+				}
+			}
+
+			statusReporter(Verbose, "Finished processing file: %s, rows written: %d", f.Name, rowsRead)
+			return nil
+		}()
+		if err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
-// This function returns a function that returns the included headers based on the provided indices
-// It exists only because if defined inline in a receiver function, the function also is a receiver, which i don't want
-// Also you can't define a function type that is a method receiver
-// The quirks of Go...
-func getIncludedHeadersFunc(headers []string, includeIndices []int) func() []string {
-	return func() []string {
-		included := make([]string, len(includeIndices))
-		for i, idx := range includeIndices {
-			included[i] = headers[idx]
+type iteratorEntry struct {
+	record []string
+	err    error
+}
+
+func iterateCSVRows(src *csv.Reader) iter.Seq[*iteratorEntry] {
+	return func(yield func(*iteratorEntry) bool) {
+		for {
+			record, err := src.Read()
+			if err == io.EOF {
+				break
+			}
+			if err != nil {
+				yield(&iteratorEntry{err: err})
+				break
+			}
+			cont := yield(&iteratorEntry{record: record})
+			if !cont {
+				break
+			}
 		}
-		return included
 	}
 }
 

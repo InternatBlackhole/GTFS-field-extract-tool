@@ -48,6 +48,56 @@ func Test_parseFieldsFieldList(t *testing.T) {
 	}
 }
 
+func Test_ParseAndValidate(t *testing.T) {
+	tests := []struct {
+		name    string
+		params  *ExtractParams
+		wantErr bool
+	}{
+		{
+			name: "exclude-files and include-files mutually exclusive",
+			params: &ExtractParams{
+				excludedFiles: []string{"stops.txt"},
+				includedFiles: []string{"routes.txt"}},
+			wantErr: true,
+		},
+		{
+			name: "exclude-shapes and exclude-files shapes.txt mutually exclusive",
+			params: &ExtractParams{
+				excludeShapes: true,
+				excludedFiles: []string{"shapes.txt"}},
+			wantErr: true,
+		},
+		{
+			name: "shapes.txt cannot be excluded directly",
+			params: &ExtractParams{
+				excludedFiles: []string{"shapes.txt"}},
+			wantErr: true,
+		},
+		{
+			name: "same field cannot be both included and excluded",
+			params: &ExtractParams{
+				includedFields: map[string][]string{
+					"stops.txt": {"stop_name"},
+				},
+				excludedFields: map[string][]string{
+					"stops.txt": {"stop_name"},
+				}},
+
+			wantErr: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			err := tt.params.Parse()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ExtractParams.Parse() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
 func mapsEqual(a, b map[string][]string) bool {
 	if len(a) != len(b) {
 		return false

@@ -15,10 +15,9 @@ var (
 	ErrMutuallyExclusiveFiles  = errors.New("include-files and exclude-files flags are mutually exclusive")
 	ErrMutuallyExclusiveShapes = errors.New("exclude-shapes flag cannot be used with exclude-files including shapes.txt")
 	ErrShapesExcluded          = errors.New("shapes.txt is excluded")
-	ErrExcludedFieldsNotParsed = errors.New("excluded fields not parsed")
-	ErrIncludedFieldsNotParsed = errors.New("included fields not parsed")
 	ErrFieldOverlap            = errors.New("a field cannot be both included and excluded")
-	ErrNotValidated            = errors.New("parameters not validated")
+	ErrNotParsed               = errors.New("parameters not parsed")
+	ErrParsingFailed           = errors.New("parsing parameters failed")
 )
 
 type ExtractParams struct {
@@ -39,7 +38,7 @@ type ExtractParams struct {
 	// format filename,fieldnames
 	_includedFields []string
 
-	validated bool
+	parsed bool
 }
 
 // TODO: remove?
@@ -75,7 +74,8 @@ func NewExtractParams(
 	}
 }
 
-func NewExtractParamsWithMaps(
+// NewExtractParamsParsed creates an ExtractParams instance with all fields parsed and set.
+func NewExtractParamsParsed(
 	excludedFiles, includedFiles []string,
 	excludeEmptyFiles, excludeEmptyFields, excludeShapes bool,
 	excludedFields, includedFields map[string][]string,
@@ -88,7 +88,7 @@ func NewExtractParamsWithMaps(
 		excludeShapes:      excludeShapes,
 		excludedFields:     excludedFields,
 		includedFields:     includedFields,
-		validated:          true,
+		parsed:             true,
 	}
 }
 
@@ -120,29 +120,23 @@ func (e *ExtractParams) ExcludeShapes() bool {
 	return e.excludeShapes
 }
 
-func (e *ExtractParams) ParseFieldLists() error {
+func (e *ExtractParams) Parse() error {
+	if e.parsed {
+		return nil
+	}
 	var err error
-	e.excludedFields, err = parseFieldsFieldList(e._excludedFields)
-	if err != nil {
-		return err
-	}
-	e.includedFields, err = parseFieldsFieldList(e._includedFields)
-	if err != nil {
-		return err
-	}
 
-	return nil
-}
-
-func (e *ExtractParams) Validate() error {
-	if !e.validated {
-		return ErrNotValidated
-	}
 	if e.excludedFields == nil && len(e._excludedFields) > 0 {
-		return ErrExcludedFieldsNotParsed
+		e.excludedFields, err = parseFieldsFieldList(e._excludedFields)
+		if err != nil {
+			return errors.Join(ErrParsingFailed, fmt.Errorf("error parsing excluded fields: %w", err))
+		}
 	}
 	if e.includedFields == nil && len(e._includedFields) > 0 {
-		return ErrIncludedFieldsNotParsed
+		e.includedFields, err = parseFieldsFieldList(e._includedFields)
+		if err != nil {
+			return errors.Join(ErrParsingFailed, fmt.Errorf("error parsing included fields: %w", err))
+		}
 	}
 
 	included := e.includedFields
@@ -152,24 +146,28 @@ func (e *ExtractParams) Validate() error {
 		// If there are overlapping fields, return an error
 		if _, ok := excluded[fileName]; ok {
 			// field overlap
-			return fmt.Errorf("%w field overlap on file %s", ErrFieldOverlap, fileName)
+			return errors.Join(ErrParsingFailed, ErrFieldOverlap, fmt.Errorf("overlap on file %s", fileName))
 		}
 	}
 
 	if len(e.includedFiles) > 0 && len(e.excludedFiles) > 0 {
-		return ErrMutuallyExclusiveFiles
+		return errors.Join(ErrParsingFailed, ErrMutuallyExclusiveFiles)
 	}
 
 	if slices.Contains(e.ExcludedFiles(), "shapes.txt") {
 		if e.ExcludeShapes() {
-			return ErrMutuallyExclusiveShapes
+			return errors.Join(ErrParsingFailed, ErrMutuallyExclusiveShapes)
 		}
-		return ErrShapesExcluded
+		return errors.Join(ErrParsingFailed, ErrShapesExcluded)
 	}
 
-	e.validated = true
+	e.parsed = true
 
 	return nil
+}
+
+func (e *ExtractParams) IsParsed() bool {
+	return e.parsed
 }
 
 func parseFieldsFieldList(fieldList []string) (map[string][]string, error) {

@@ -25,14 +25,14 @@ type testExtractParams struct {
 }
 
 func (tep *testExtractParams) ToExtractParams() *params.ExtractParams {
-	return params.NewExtractParamsWithMaps(
+	return params.NewExtractParamsParsed(
 		tep.excludedFiles,
 		tep.includedFiles,
 		tep.excludeEmptyFiles,
 		tep.excludeEmptyFields,
 		tep.excludeShapes,
-		tep.includedFields,
 		tep.excludedFields,
+		tep.includedFields,
 	)
 }
 
@@ -92,11 +92,19 @@ func Test_filterFiles(t *testing.T) {
 type zipTestFunc func(reader *zip.Reader, filename string, f *zip.File) error // error if test fails
 type zipTests map[string]zipTestFunc                                          // filename, test function
 
+type zipTest struct {
+	name           string
+	inputZip       func() *zip.Reader
+	flags          *testExtractParams
+	wantErr        bool
+	outputZipTests zipTests // if len > 0, runs tests on output zip, if key "ALL", runs single test on whole zip
+}
+
 func Test_extractCommand(t *testing.T) {
-	/*dir, set := os.LookupEnv("PWD_CODE")
+	dir, set := os.LookupEnv("PWD_CODE")
 	if set {
 		t.Chdir(dir)
-	}*/
+	}
 
 	readBuffer := new(bytes.Buffer)
 	//read whole file into buffer
@@ -117,51 +125,7 @@ func Test_extractCommand(t *testing.T) {
 		return zipReader
 	}
 
-	tests := []struct {
-		name string
-
-		inputZip       func() *zip.Reader
-		flags          *testExtractParams
-		wantErr        bool
-		outputZipTests zipTests // if len > 0, runs tests on output zip, if key "ALL", runs single test on whole zip
-	}{
-		//THESE SHOULD BE TESTS FOR THE Validate() FUNCTION
-		{
-			name:     "exclude-files and include-files mutually exclusive",
-			inputZip: newZipReader,
-			flags: &testExtractParams{
-				excludedFiles: []string{"stops.txt"},
-				includedFiles: []string{"routes.txt"}},
-			wantErr: true,
-		},
-		{
-			name:     "exclude-shapes and exclude-files shapes.txt mutually exclusive",
-			inputZip: newZipReader,
-			flags: &testExtractParams{
-				excludeShapes: true,
-				excludedFiles: []string{"shapes.txt"}},
-			wantErr: true,
-		},
-		{
-			name:     "shapes.txt cannot be excluded directly",
-			inputZip: newZipReader,
-			flags: &testExtractParams{
-				excludedFiles: []string{"shapes.txt"}},
-			wantErr: true,
-		},
-		{
-			name:     "same field cannot be both included and excluded",
-			inputZip: newZipReader,
-			flags: &testExtractParams{
-				includedFields: map[string][]string{
-					"stops.txt": {"stop_name"},
-				},
-				excludedFields: map[string][]string{
-					"stops.txt": {"stop_name"},
-				}},
-
-			wantErr: true,
-		},
+	tests := []zipTest{
 		{
 			name:     "just exclude files",
 			inputZip: newZipReader,
@@ -185,7 +149,7 @@ func Test_extractCommand(t *testing.T) {
 			},
 			wantErr: false,
 			outputZipTests: zipTests{
-				"routes.txt": hasHeader("route_id", "agency_id", "route_long_name", "route_type", "route_text_color"), // route_desc excluded
+				"routes.txt": hasHeader("route_id", "agency_id", "route_long_name", "route_type", "route_text_color"), // route_color excluded
 				"stops.txt":  hasHeader("stop_name", "stop_id"),
 			},
 		},
@@ -206,7 +170,19 @@ func Test_extractCommand(t *testing.T) {
 			buffer := new(bytes.Buffer)
 			zipWriter := zip.NewWriter(buffer)
 
-			err := Extract(inputZip, zipWriter, tt.flags.ToExtractParams())
+			var reporter StatusConsumer = func(status string, level StatusLevel) {
+				fmt.Fprintln(os.Stderr, status)
+			}
+
+			reportLevel := EvenMoreVerbose
+
+			extractor := NewExtractor(
+				tt.flags.ToExtractParams(),
+				reporter,
+				reportLevel,
+			)
+
+			err := extractor.Extract(inputZip, zipWriter)
 			zipWriter.Close()
 
 			if (err != nil) != tt.wantErr {
@@ -219,7 +195,6 @@ func Test_extractCommand(t *testing.T) {
 					t.Errorf("failed to create zip reader: %v", err)
 					return
 				}
-				//defer zipReader.Close()
 				if testFunc, ok := tt.outputZipTests["ALL"]; ok {
 					if err := testFunc(zipReader, "", nil); err != nil {
 						t.Errorf("output zip test failed: %v", err)

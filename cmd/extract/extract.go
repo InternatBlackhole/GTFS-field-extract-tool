@@ -10,8 +10,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var extractor *extract.Extractor
-
 // extractCmd represents the extract command
 var ExtractCmd = &cobra.Command{
 	Use:   "extract [flags]... input-gtfs output-gtfs",
@@ -35,10 +33,23 @@ var ExtractCmd = &cobra.Command{
 		defer writeFile.Close()
 		defer zipWriter.Close()
 
-		return extractor.Extract(&zipReader.Reader, zipWriter)
+		return _extractor.Extract(&zipReader.Reader, zipWriter)
 	},
 	PreRunE: func(cmd *cobra.Command, args []string) error {
 		err := _params.Parse()
+		if err != nil {
+			return err
+		}
+
+		verbosity := extract.NoStatus
+
+		if _verboseverbose {
+			verbosity = extract.EvenMoreVerbose
+		} else if _verbose {
+			verbosity = extract.Verbose
+		}
+
+		_extractor = extract.NewExtractor(_params, reporter, verbosity)
 		if err != nil {
 			return err
 		}
@@ -49,7 +60,10 @@ var ExtractCmd = &cobra.Command{
 }
 
 var (
-	_params *params.ExtractParams
+	_params         *params.ExtractParams
+	_verbose        bool
+	_verboseverbose bool
+	_extractor      *extract.Extractor
 )
 
 var reporter extract.StatusConsumer = func(status string, level extract.StatusLevel) {
@@ -57,5 +71,8 @@ var reporter extract.StatusConsumer = func(status string, level extract.StatusLe
 }
 
 func init() {
+	// TODO: make params.ExtractParams only be the parser and holder of parsed state
 	_params = params.NewExtractParamsWithCobraBindings(ExtractCmd)
+	ExtractCmd.Flags().BoolVarP(&_verbose, "verbose", "v", false, "Enable verbose output")
+	ExtractCmd.Flags().BoolVar(&_verboseverbose, "verboseverbose", false, "Enable very verbose output")
 }

@@ -11,6 +11,14 @@ import (
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/params"
 )
 
+// Extractor is responsible for processing GTFS data based on the provided parameters.
+// It filters files and fields, and writes the resulting data to the output.
+type Extractor struct {
+	params      *params.ExtractParams
+	status      StatusConsumer
+	reportLevel StatusLevel
+}
+
 type StatusLevel int
 
 const (
@@ -21,13 +29,7 @@ const (
 
 type StatusConsumer func(status string, statusLevel StatusLevel)
 
-// TODO: decouple Extractor from params in general
-type Extractor struct {
-	params      *params.ExtractParams
-	status      StatusConsumer
-	reportLevel StatusLevel
-}
-
+// NewExtractor creates a new Extractor instance with the given parameters, status consumer, and report level.
 func NewExtractor(params *params.ExtractParams, status StatusConsumer, reportLevel StatusLevel) *Extractor {
 	return &Extractor{
 		params:      params,
@@ -53,6 +55,8 @@ func (e *Extractor) report(level StatusLevel, format string, a ...any) {
 	}
 }
 
+// Extract processes the input zip archive, filtering and transforming the data according to the parameters,
+// and writes the result to the output zip archive.
 func (e *Extractor) Extract(zipReader *zip.Reader, zipWriter *zip.Writer) error {
 	if !e.params.IsParsedAndValid() {
 		return fmt.Errorf("extract parameters are not parsed or valid")

@@ -18,6 +18,8 @@ var (
 	ErrParsingFailed           = errors.New("parsing parameters failed")
 )
 
+// ExtractParams holds the parameters for the extract command, including file and field filters.
+// It also provides methods for parsing and validating these parameters.
 type ExtractParams struct {
 	excludedFiles []string
 	includedFiles []string

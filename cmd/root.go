@@ -10,6 +10,7 @@ import (
 	"github.com/spf13/cobra"
 )
 
+// rootCmd is the base command for the GTFS tool, providing a CLI interface for various operations.
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
 	Use:   "gtfs-tool",

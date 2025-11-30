@@ -15,7 +15,8 @@ import (
 var _params *params.ExtractParams
 var _extractor *extract.Extractor
 
-// extractCmd represents the extract command
+// ExtractCmd represents the extract command, which allows users to extract subsets of GTFS data
+// based on various filtering options such as included/excluded files and fields.
 var ExtractCmd = &cobra.Command{
 	Use:   "extract [flags]... input-gtfs output-gtfs",
 	Short: "Extract a subset of GTFS data, with various filtering options",

@@ -3,7 +3,9 @@ package extract
 import (
 	"archive/zip"
 	"fmt"
+	"maps"
 	"os"
+	"slices"
 
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/extract"
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/params"
@@ -39,9 +41,22 @@ var ExtractCmd = &cobra.Command{
 		return _extractor.Extract(&zipReader.Reader, zipWriter)
 	},
 	PreRunE: func(cmd *cobra.Command, args []string) error {
+		uniquly_combine := func(a []string, b []string) []string {
+			m := make(map[string]any, len(a)+len(b))
+			for _, v := range a {
+				m[v] = nil
+			}
+			for _, v := range b {
+				m[v] = nil
+			}
+			return slices.Collect(maps.Keys(m))
+		}
+		exclude_files := uniquly_combine(_exclude_files_individual, _exclude_files_sliced)
+		include_files := uniquly_combine(_include_files_individual, _include_files_sliced)
+
 		_params = params.NewExtractParams(
-			_exclude_files,
-			_include_files,
+			exclude_files,
+			include_files,
 			_exclude_emptyfiles,
 			_exclude_emptyfields,
 			_exclude_shapes,
@@ -76,22 +91,26 @@ var reporter extract.StatusConsumer = func(status string, level extract.StatusLe
 }
 
 var (
-	_exclude_files       []string
-	_include_files       []string
-	_exclude_fields      []string
-	_include_fields      []string
-	_exclude_emptyfiles  bool
-	_exclude_emptyfields bool
-	_exclude_shapes      bool
-	_verbose             bool
-	_verboseverbose      bool
+	_exclude_files_individual []string
+	_exclude_files_sliced     []string
+	_include_files_individual []string
+	_include_files_sliced     []string
+	_exclude_fields           []string
+	_include_fields           []string
+	_exclude_emptyfiles       bool
+	_exclude_emptyfields      bool
+	_exclude_shapes           bool
+	_verbose                  bool
+	_verboseverbose           bool
 )
 
 func init() {
 	fl := ExtractCmd.Flags()
 
-	fl.StringArrayVar(&_exclude_files, "exclude-files", []string{}, "Files to exclude")
-	fl.StringArrayVar(&_include_files, "include-files", []string{}, "Files to include")
+	fl.StringArrayVar(&_exclude_files_individual, "exclude-file", []string{}, "Individual file to exclude (can be specified multiple times)")
+	fl.StringArrayVar(&_include_files_individual, "include-file", []string{}, "Individual file to include (can be specified multiple times)")
+	fl.StringSliceVar(&_exclude_files_sliced, "exclude-files", []string{}, "Files to exclude, separated by commas")
+	fl.StringSliceVar(&_include_files_sliced, "include-files", []string{}, "Files to include, separated by commas")
 	fl.StringArrayVar(&_exclude_fields, "exclude-fields", []string{}, "Fields to exclude (format: filename,fieldnames,...)")
 	fl.StringArrayVar(&_include_fields, "include-fields", []string{}, "Fields to include (format: filename,fieldnames,...)")
 	fl.BoolVar(&_exclude_emptyfiles, "exclude-empty-files", false, "Exclude empty files")
@@ -100,6 +119,8 @@ func init() {
 	fl.BoolVarP(&_verbose, "verbose", "v", false, "Enable verbose output")
 	fl.BoolVar(&_verboseverbose, "verboseverbose", false, "Enable very verbose output")
 
+	ExtractCmd.MarkFlagsMutuallyExclusive("exclude-file", "include-file")
 	ExtractCmd.MarkFlagsMutuallyExclusive("exclude-files", "include-files")
-
+	ExtractCmd.MarkFlagsMutuallyExclusive("exclude-file", "include-files")
+	ExtractCmd.MarkFlagsMutuallyExclusive("include-file", "exclude-files")
 }

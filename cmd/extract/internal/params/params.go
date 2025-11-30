@@ -145,6 +145,7 @@ func (e *ExtractParams) ParseAndValidate() error {
 			return errors.Join(ErrParsingFailed, fmt.Errorf("error parsing excluded fields: %w", err))
 		}
 	}
+
 	if e.includedFields == nil && len(e._includedFields) > 0 {
 		e.includedFields, err = parseFieldsFieldList(e._includedFields)
 		if err != nil {
@@ -163,10 +164,12 @@ func (e *ExtractParams) ParseAndValidate() error {
 		}
 	}
 
+	// check mutually exclusive include/exclude files (already enforced by cobra, but double check)
 	if len(e.includedFiles) > 0 && len(e.excludedFiles) > 0 {
 		return errors.Join(ErrParsingFailed, ErrMutuallyExclusiveFiles)
 	}
 
+	// check if exclusion of shapes.txt is done with file exclusion
 	if slices.Contains(e.ExcludedFiles(), "shapes.txt") {
 		if e.ExcludeShapes() {
 			return errors.Join(ErrParsingFailed, ErrMutuallyExclusiveShapes)

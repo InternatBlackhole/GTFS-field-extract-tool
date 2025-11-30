@@ -84,6 +84,7 @@ func (e *Extractor) Extract(zipReader *zip.Reader, zipWriter *zip.Writer) error 
 	}
 
 	for _, f := range filteredFiles {
+		// In a closure to ensure file is closed after processing (defer)
 		err := func() error {
 			statusReporter(Verbose, "Processing file: %s", f.Name)
 			srcFile, err := f.Open()
@@ -108,6 +109,7 @@ func (e *Extractor) Extract(zipReader *zip.Reader, zipWriter *zip.Writer) error 
 				case entry == nil && ok:
 					return nil, fmt.Errorf("unexpected nil entry when reading headers from file %s", f.Name)
 				case entry.err != nil && (entry.err == io.EOF || len(entry.record) == 0):
+					// File has no headers and no data
 					return nil, nil
 				case entry.err != nil:
 					return nil, fmt.Errorf("error reading headers from file %s: %w", f.Name, entry.err)
@@ -132,7 +134,7 @@ func (e *Extractor) Extract(zipReader *zip.Reader, zipWriter *zip.Writer) error 
 				statusReporter(Verbose, "\tEmpty file: %s, not excluding", f.Name)
 			}
 
-			// Read the first row after headers to determine if the file is empty
+			// Read the first row after headers to determine if the file is data empty
 			entry, ok = nextRow()
 			dataRow, err := rowDecider(entry, ok)
 			if err != nil {
@@ -157,6 +159,7 @@ func (e *Extractor) Extract(zipReader *zip.Reader, zipWriter *zip.Writer) error 
 
 			statusReporter(EvenMoreVerbose, "\tOriginal header: %v", headers)
 
+			// Determine which columns to include
 			includeIndices := make([]int, 0, len(headers))
 			for i, header := range headers {
 				if e.decider(f.Name, header) {
@@ -256,6 +259,7 @@ func filterFiles(srcFiles []*zip.File, filterFiles []string, include bool) []*zi
 	})
 }
 
+// decider determines whether a given field in a file should be included based on the Extractor's parameters.
 func (e *Extractor) decider(fileName string, fieldName string) bool {
 	// Check inclusion first
 	if fields, ok := e.params.IncludedFields()[fileName]; ok {

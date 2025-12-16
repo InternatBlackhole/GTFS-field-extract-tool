@@ -10,6 +10,7 @@ import (
 	"testing"
 
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/params"
+	"github.com/InternatManhole/dujpp-gtfs-tool/internal/logging"
 )
 
 type testExtractParams struct {
@@ -196,11 +197,11 @@ func Test_extractCommand(t *testing.T) {
 			buffer := new(bytes.Buffer)
 			zipWriter := zip.NewWriter(buffer)
 
-			var reporter StatusConsumer = func(status string, level StatusLevel) {
+			var reporter logging.LogConsumer = func(status string, level logging.StatusLevel) {
 				fmt.Fprintln(os.Stderr, status)
 			}
 
-			reportLevel := EvenMoreVerbose
+			reportLevel := logging.EvenMoreVerbose
 
 			params := tt.flags.ToExtractParams()
 			err := params.ParseAndValidate()

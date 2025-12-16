@@ -9,6 +9,7 @@ import (
 
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/extract"
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract/internal/params"
+	"github.com/InternatManhole/dujpp-gtfs-tool/internal/logging"
 	"github.com/spf13/cobra"
 )
 
@@ -69,12 +70,12 @@ var ExtractCmd = &cobra.Command{
 			return err
 		}
 
-		verbosity := extract.NoStatus
+		verbosity := logging.NoStatus
 
 		if _verboseverbose {
-			verbosity = extract.EvenMoreVerbose
+			verbosity = logging.EvenMoreVerbose
 		} else if _verbose {
-			verbosity = extract.Verbose
+			verbosity = logging.Verbose
 		}
 
 		_extractor = extract.NewExtractor(_params, reporter, verbosity)
@@ -87,7 +88,7 @@ var ExtractCmd = &cobra.Command{
 	Args: cobra.ExactArgs(2),
 }
 
-var reporter extract.StatusConsumer = func(status string, level extract.StatusLevel) {
+var reporter logging.LogConsumer = func(status string, level logging.StatusLevel) {
 	fmt.Println(status)
 }
 

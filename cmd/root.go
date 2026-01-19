@@ -7,8 +7,12 @@ import (
 	"os"
 
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/extract"
+	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/merge"
+	"github.com/InternatManhole/dujpp-gtfs-tool/internal/logging"
 	"github.com/spf13/cobra"
 )
+
+var logger logging.Logger
 
 // rootCmd is the base command for the GTFS tool, providing a CLI interface for various operations.
 // rootCmd represents the base command when called without any subcommands
@@ -24,6 +28,19 @@ to quickly create a Cobra application.`,
 	// Uncomment the following line if your bare application
 	// has an action associated with it:
 	// Run: func(cmd *cobra.Command, args []string) { },
+	PreRunE: func(cmd *cobra.Command, args []string) error {
+		var logLevel logging.StatusLevel
+		if _verboseverbose {
+			logLevel = logging.EvenMoreVerbose
+		} else if _verbose {
+			logLevel = logging.Verbose
+		} else {
+			logLevel = logging.NoStatus
+		}
+
+		logger = logging.NewDefaultLogger(logLevel)
+		return nil
+	},
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -35,6 +52,11 @@ func Execute() {
 	}
 }
 
+var (
+	_verbose        bool
+	_verboseverbose bool
+)
+
 func init() {
 	// Here you will define your flags and configuration settings.
 	// Cobra supports persistent flags, which, if defined here,
@@ -45,5 +67,16 @@ func init() {
 	// Cobra also supports local flags, which will only run
 	// when this action is called directly.
 	// rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+
+	fl := rootCmd.PersistentFlags()
+	fl.BoolVarP(&_verbose, "verbose", "v", false, "Enable verbose output")
+	fl.BoolVar(&_verboseverbose, "verboseverbose", false, "Enable very verbose output")
+
 	rootCmd.AddCommand(extract.ExtractCmd)
+	rootCmd.AddCommand(merge.MergeCmd)
+
+}
+
+func GetLogger() logging.Logger {
+	return logger
 }

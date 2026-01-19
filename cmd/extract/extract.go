@@ -118,8 +118,8 @@ func init() {
 	fl.BoolVar(&_exclude_emptyfiles, "exclude-empty-files", false, "Exclude empty files")
 	fl.BoolVar(&_exclude_emptyfields, "exclude-empty-fields", false, "Exclude empty fields")
 	fl.BoolVar(&_exclude_shapes, "exclude-shapes", false, "Exclude shapes")
-	fl.BoolVarP(&_verbose, "verbose", "v", false, "Enable verbose output")
-	fl.BoolVar(&_verboseverbose, "verboseverbose", false, "Enable very verbose output")
+	// fl.BoolVarP(&_verbose, "verbose", "v", false, "Enable verbose output")
+	// fl.BoolVar(&_verboseverbose, "verboseverbose", false, "Enable very verbose output")
 
 	ExtractCmd.MarkFlagsMutuallyExclusive("exclude-file", "include-file")
 	ExtractCmd.MarkFlagsMutuallyExclusive("exclude-files", "include-files")

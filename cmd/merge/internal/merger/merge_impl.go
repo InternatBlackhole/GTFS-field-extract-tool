@@ -4,9 +4,9 @@ import (
 	"archive/zip"
 	"io"
 
-	"github.com/InternatManhole/dujpp-gtfs-tool/cmd"
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/merge/internal/mergeparams"
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/merge/internal/merger/filesmerger"
+	"github.com/InternatManhole/dujpp-gtfs-tool/internal/logging"
 )
 
 type Merger struct {
@@ -20,7 +20,7 @@ func NewMerger(params *mergeparams.MergeParams) *Merger {
 }
 
 func (m *Merger) Merge(inputArchives []*zip.Reader, outputArchive *zip.Writer) error {
-	logger := cmd.GetLogger()
+	logger := logging.GetLogger()
 	// Plan:
 	// 1. Read the same .txt files from all inputArchives
 	// 2. Merge their contents according to m.params

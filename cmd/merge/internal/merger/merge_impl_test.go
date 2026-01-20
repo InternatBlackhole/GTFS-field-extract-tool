@@ -8,7 +8,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/InternatManhole/dujpp-gtfs-tool/cmd"
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/merge/internal/mergeparams"
 	"github.com/InternatManhole/dujpp-gtfs-tool/internal/logging"
 )
@@ -24,9 +23,11 @@ func createZipBytes(files map[string]string) []byte {
 	return buf.Bytes()
 }
 
+func TestMain(m *testing.M) {
+	logging.SetNewLoggerWithLevel(logging.EvenMoreVerbose)
+}
+
 func TestMerger_Merge_Stops(t *testing.T) {
-	// ensure package-level logger is initialized (test-only)
-	cmd.SetLogger(logging.NewDefaultLogger(logging.NoStatus))
 
 	// two archives each with stops.txt where stop_id 1 conflicts
 	files1 := map[string]string{

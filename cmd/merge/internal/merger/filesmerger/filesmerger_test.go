@@ -8,11 +8,19 @@ import (
 	"testing"
 
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/merge/internal/mergeparams"
+	"github.com/InternatManhole/dujpp-gtfs-tool/internal/logging"
 )
 
+// Tests initilizer
+func TestMain(m *testing.M) {
+	logging.SetNewLoggerWithLevel(logging.EvenMoreVerbose)
+	// No special setup needed currently
+	m.Run()
+}
+
 func TestMergeFiles_WithPrefixes(t *testing.T) {
-	csv1 := "id,field1\n1,A\n2,B\n"
-	csv2 := "id,field2\n1,C\n3,D\n"
+	csv1 := "_id,field1\n1,A\n2,B\n"
+	csv2 := "_id,field2\n1,C\n3,D\n"
 
 	readers := []string{csv1, csv2}
 	inputReaders := make([]*strings.Reader, 0, len(readers))
@@ -52,18 +60,18 @@ func TestMergeFiles_WithPrefixes(t *testing.T) {
 		t.Fatalf("no records written")
 	}
 	header := records[0]
-	expectedHeader := []string{"id", "field1", "field2"}
+	expectedHeader := []string{"_id", "field1", "field2"}
 	if !equalStrings(header, expectedHeader) {
 		t.Fatalf("unexpected header: got %v want %v", header, expectedHeader)
 	}
 
 	// collect ids from body
-	ids := make(map[string]struct{})
+	ids := make(map[string]any)
 	for _, r := range records[1:] {
 		if len(r) == 0 {
 			continue
 		}
-		ids[r[0]] = struct{}{}
+		ids[r[0]] = nil
 	}
 
 	// Expect original 1 and 2, and prefixed  p2_1 and 3

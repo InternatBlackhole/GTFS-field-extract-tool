@@ -6,8 +6,8 @@ import (
 	"io"
 	"strings"
 
-	"github.com/InternatManhole/dujpp-gtfs-tool/cmd"
 	"github.com/InternatManhole/dujpp-gtfs-tool/cmd/merge/internal/mergeparams"
+	"github.com/InternatManhole/dujpp-gtfs-tool/internal/logging"
 	"github.com/samber/lo"
 )
 
@@ -36,7 +36,7 @@ func NewFilesMergerWithParams(params mergeparams.MergeParams) *FilesMerger {
 }
 
 func (fm *FilesMerger) MergeFiles(inputFiles []io.Reader, writerCreate func() (io.Writer, func())) error {
-	logger := cmd.GetLogger()
+	logger := logging.GetLogger()
 	// All the input files refer to the same GTFS file from different archives.
 	// Implement merging logic here, considering fm.prefixes and fm.force.
 	// Use writerCreate to get the output writer.
@@ -139,9 +139,9 @@ func (fm *FilesMerger) MergeFiles(inputFiles []io.Reader, writerCreate func() (i
 				}
 
 				// logger.EvenMoreVerbose("Writing merged record: \"%s\"", fullRecord)
-				if err := outputCsv.Write(fullRecord); err != nil {
-					return err
-				}
+			}
+			if err := outputCsv.Write(fullRecord); err != nil {
+				return err
 			}
 		}
 	}

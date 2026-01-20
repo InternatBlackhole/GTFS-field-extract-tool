@@ -12,8 +12,6 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var logger logging.Logger
-
 // rootCmd is the base command for the GTFS tool, providing a CLI interface for various operations.
 // rootCmd represents the base command when called without any subcommands
 var rootCmd = &cobra.Command{
@@ -37,8 +35,7 @@ to quickly create a Cobra application.`,
 		} else {
 			logLevel = logging.NoStatus
 		}
-
-		logger = logging.NewDefaultLogger(logLevel)
+		logging.SetNewLoggerWithLevel(logLevel)
 		return nil
 	},
 }
@@ -75,8 +72,4 @@ func init() {
 	rootCmd.AddCommand(extract.ExtractCmd)
 	rootCmd.AddCommand(merge.MergeCmd)
 
-}
-
-func GetLogger() logging.Logger {
-	return logger
 }

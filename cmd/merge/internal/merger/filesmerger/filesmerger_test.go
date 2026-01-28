@@ -81,6 +81,48 @@ func TestMergeFiles_WithPrefixes(t *testing.T) {
 			t.Fatalf("missing expected id %q in output: ids=%v", w, ids)
 		}
 	}
+
+	// Subtest: allow blank prefix for first input (index 0) only
+	t.Run("BlankPrefixFirstInput", func(t *testing.T) {
+		// recreate readers since original were consumed
+		csv1 := "_id,field1\n1,A\n2,B\n"
+		csv2 := "_id,field2\n1,C\n3,D\n"
+		in := []io.Reader{strings.NewReader(csv1), strings.NewReader(csv2)}
+
+		var out2 bytes.Buffer
+		writerCreate2 := func() (io.Writer, func()) { return &out2, func() {} }
+
+		// prefixes: first input blank, second input gets p2_
+		params2 := *mergeparams.NewMergeParams([]string{"", "p2_"}, false)
+		fm2 := NewFilesMergerWithParams(params2)
+
+		if err := fm2.MergeFiles(in, writerCreate2); err != nil {
+			t.Fatalf("MergeFiles failed for blank-prefix subtest: %v", err)
+		}
+
+		outR2 := csv.NewReader(strings.NewReader(out2.String()))
+		records2, err := outR2.ReadAll()
+		if err != nil {
+			t.Fatalf("failed to parse output CSV in blank-prefix subtest: %v", err)
+		}
+
+		// collect ids
+		ids2 := make(map[string]any)
+		for _, r := range records2[1:] {
+			if len(r) == 0 {
+				continue
+			}
+			ids2[r[0]] = nil
+		}
+
+		// Expect 1, 2, p2_1, 3 when first input is unprefixed
+		want2 := []string{"1", "2", "p2_1", "3"}
+		for _, w := range want2 {
+			if _, ok := ids2[w]; !ok {
+				t.Fatalf("missing expected id %q in blank-prefix output: ids=%v", w, ids2)
+			}
+		}
+	})
 }
 
 func TestMergeFiles_ForceKeepsDuplicates(t *testing.T) {
@@ -123,6 +165,49 @@ func TestMergeFiles_ForceKeepsDuplicates(t *testing.T) {
 	if !foundFirst || !foundSecond {
 		t.Fatalf("expected both duplicate records to be present, foundFirst=%v foundSecond=%v", foundFirst, foundSecond)
 	}
+
+	// Subtest: blank prefix for first input while forcing duplicates
+	t.Run("BlankPrefixFirstInput_Force", func(t *testing.T) {
+		csv1 := "id,field1\n1,A\n"
+		csv2 := "id,field1\n1,B\n"
+		in2 := []io.Reader{strings.NewReader(csv1), strings.NewReader(csv2)}
+
+		var out bytes.Buffer
+		writerCreate := func() (io.Writer, func()) { return &out, func() {} }
+
+		// first input blank, second prefixed, force duplicates preserved
+		params := *mergeparams.NewMergeParams([]string{"", "p_"}, true)
+		fm := NewFilesMergerWithParams(params)
+
+		if err := fm.MergeFiles(in2, writerCreate); err != nil {
+			t.Fatalf("MergeFiles failed in BlankPrefixFirstInput_Force: %v", err)
+		}
+
+		outR := csv.NewReader(strings.NewReader(out.String()))
+		records, err := outR.ReadAll()
+		if err != nil {
+			t.Fatalf("failed to parse output CSV: %v", err)
+		}
+
+		if len(records) < 3 {
+			t.Fatalf("expected at least header + 2 rows, got %d", len(records))
+		}
+
+		// ensure both duplicate id values appear somewhere in the output (unprefixed due to force)
+		foundFirst := false
+		foundSecond := false
+		for _, r := range records[1:] {
+			if r[0] == "1" && r[1] == "A" {
+				foundFirst = true
+			}
+			if r[0] == "1" && r[1] == "B" {
+				foundSecond = true
+			}
+		}
+		if !foundFirst || !foundSecond {
+			t.Fatalf("expected both duplicate records to be present in BlankPrefixFirstInput_Force, foundFirst=%v foundSecond=%v", foundFirst, foundSecond)
+		}
+	})
 }
 
 // helper

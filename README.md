@@ -2,13 +2,15 @@
 
 ## Cilji
 
-- [x] --exclude-file stringArray     izloči eno ali več datotek iz originalnega feeda
-- [x] --include-file stringArray     v končnem feedu bodo samo te datoteke
-- [x] --exclude-field stringArray    izloči podane polja v datoteki; format: file name, field names…
-- [x] --include-filed stringArray    v output feedu bodo v podani datoteki samo podana polja; format: file name, field names…
-- [x] --exclude-empty-files          izloči prazne datoteke iz feeda
-- [ ] --exclude-empty-fields         izloči prazna polja iz feeda
-- [x] --exclude-shapes               izloči celoten shapes iz feeda
+- [x] extract --exclude-file stringArray     izloči eno ali več datotek iz originalnega feeda
+- [x] extract --include-file stringArray     v končnem feedu bodo samo te datoteke
+- [x] extract --exclude-field stringArray    izloči podane polja v datoteki; format: file name, field names…
+- [x] extract --include-filed stringArray    v output feedu bodo v podani datoteki samo podana polja; format: file name, field names…
+- [x] extract --exclude-empty-files          izloči prazne datoteke iz feeda
+- [x] extract --exclude-empty-fields         izloči prazna polja iz feeda
+- [x] extract --exclude-shapes               izloči celoten shapes iz feeda
+- [x] merge --prefix                         združi vse GTFS vhodne feede v enga s prefix kadar je konflikt
+- [x] merge --force                          združi vse GTFS vhodne feede v enega, ignorira konflikte
 
 ## Installation
 

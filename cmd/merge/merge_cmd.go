@@ -89,7 +89,7 @@ func init() {
 	fl := MergeCmd.Flags()
 
 	fl.StringSliceVarP(&_prefixes, "prefixes", "p", []string{},
-		"List of prefixes to add to each source GTFS file's entries. If provided, the number of prefixes must match the number of input GTFS files or one prefix will be used for all input files.")
+		"List of prefixes to add to each source GTFS file's entries. If provided, the number of prefixes must match the number of input GTFS files or one prefix will be used for all input files. Only the first prefix may be blank (no prefix).")
 	fl.BoolVarP(&_force, "force", "f", false,
 		"Force merge feeds even if there are conflicting IDs")
 }

@@ -12,7 +12,10 @@ import (
 )
 
 var (
-	ErrorNoPrefixes = errors.New("no prefixes provided for merging")
+	ErrorNoPrefixes                     = errors.New("no prefixes provided for merging")
+	ErrorTooManyBlankPrefixes           = errors.New("more than one blank prefix provided; at most one blank prefix is allowed")
+	ErrorBlankPrefixOnlyAllowedForFirst = errors.New("blank prefix is only allowed for the first input archive")
+	ErrorCannotDisambiguate             = errors.New("conflict detected but no non-empty prefixes available to disambiguate; provide prefixes or use force")
 )
 
 type FilesMerger struct {
@@ -66,6 +69,7 @@ func (fm *FilesMerger) MergeFiles(inputFiles []io.Reader, writerCreate func() (i
 
 	logger.Verbose("Final file will have unified header: \"%s\"", unionHeader)
 
+	// Streaming merge: write header then process each input file in order.
 	outputWriter, closeFunc := writerCreate()
 	defer closeFunc()
 	outputCsv := csv.NewWriter(outputWriter)
@@ -76,16 +80,31 @@ func (fm *FilesMerger) MergeFiles(inputFiles []io.Reader, writerCreate func() (i
 		return err
 	}
 
-	// map[columnName][]columnIdValue again map (secondary) is used as a set
+	// map[columnName]set-of-ids seen so far
 	readIds := make(map[string]map[string]any)
 
-	// Read records from each input file, merge (aka fill missing columns), and write to output
+	// Count blank prefixes and ensure at most one and only valid for first file
+	blankCount := 0
+	for _, p := range fm.prefixes {
+		if p == "" {
+			blankCount++
+		}
+	}
+	if blankCount > 1 {
+		return ErrorTooManyBlankPrefixes
+	}
+
 	for fileIndex, csvReader := range inputCsv {
 		prefix := ""
 		if len(fm.prefixes) == len(inputCsv) {
 			prefix = fm.prefixes[fileIndex]
 		} else if len(fm.prefixes) == 1 {
 			prefix = fm.prefixes[0]
+		}
+
+		// Only allow a blank prefix for the first input archive
+		if prefix == "" && fileIndex != 0 {
+			return ErrorBlankPrefixOnlyAllowedForFirst
 		}
 
 		logger.EvenMoreVerbose("Processing file %d with prefix \"%s\"", fileIndex, prefix)
@@ -120,7 +139,7 @@ func (fm *FilesMerger) MergeFiles(inputFiles []io.Reader, writerCreate func() (i
 					// If this value already exists, we have a conflict
 					if _, exists := readIds[colName][fullRecord[i]]; exists {
 						if fm.force {
-							// Ignore conflict, just continue
+							// Ignore conflict, keep original id (allow duplicate)
 							continue
 						}
 
@@ -128,18 +147,16 @@ func (fm *FilesMerger) MergeFiles(inputFiles []io.Reader, writerCreate func() (i
 						if prefix != "" {
 							fullRecord[i] = prefix + fullRecord[i]
 						} else {
-							// fullRecord[i] = "merged_" + fullRecord[i]
-							// If no prefix is provided, we fail
-							return ErrorNoPrefixes
+							// Ambiguous: conflict detected and current input has blank prefix
+							return ErrorCannotDisambiguate
 						}
 					} else {
 						// No conflict, record the ID
 						readIds[colName][fullRecord[i]] = nil
 					}
 				}
-
-				// logger.EvenMoreVerbose("Writing merged record: \"%s\"", fullRecord)
 			}
+
 			if err := outputCsv.Write(fullRecord); err != nil {
 				return err
 			}
